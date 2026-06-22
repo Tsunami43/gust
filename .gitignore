@@ -1,0 +1,14 @@
+# Compiled binaries
+/gust
+/dist/
+*.exe
+*.out
+
+# Go build & test artifacts
+*.test
+coverage.out
+
+# Editor / OS noise
+.idea/
+.vscode/
+.DS_Store
