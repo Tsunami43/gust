@@ -9,91 +9,148 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/Tsunami43/gust/internal/netinfo"
 	"github.com/Tsunami43/gust/internal/speed"
+	"github.com/Tsunami43/gust/internal/ui"
 )
 
 // version is reported by the -version flag.
 const version = "1.0.0"
 
+// config holds the parsed command-line options for a single run.
+type config struct {
+	jsonOut    bool
+	ipOnly     bool
+	noDownload bool
+	noUpload   bool
+	sizeMB     int
+	streams    int
+	pings      int
+	timeout    time.Duration
+}
+
 func main() {
-	ipOnly := flag.Bool("ip-only", false, "only show public IP / network info and exit")
-	sizeMB := flag.Int("size", 25, "amount of data to transfer per test, in MiB")
-	streams := flag.Int("streams", 4, "number of parallel connections per test")
-	pings := flag.Int("pings", 6, "number of latency samples")
-	timeout := flag.Duration("timeout", 60*time.Second, "overall timeout for the whole run")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	flag.Parse()
-
-	if *showVersion {
-		fmt.Printf("gust %s\n", version)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
-	defer cancel()
-
-	client := newClient(*streams)
-	if err := runTests(ctx, client, *ipOnly, int64(*sizeMB)<<20, *streams, *pings); err != nil {
+	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "gust: "+err.Error())
 		os.Exit(1)
 	}
 }
 
-// runTests resolves network info and, unless ipOnly is set, measures latency,
-// download and upload throughput, printing each result as it completes.
-func runTests(ctx context.Context, client *http.Client, ipOnly bool, totalBytes int64, streams, pings int) error {
+// run parses flags, performs the requested measurements and writes the report.
+// It is separated from main so behaviour can be exercised in tests.
+func run(args []string, stdout, stderr *os.File) error {
+	cfg, showVersion, err := parseFlags(args, stderr)
+	if err != nil {
+		return err
+	}
+	if showVersion {
+		fmt.Fprintf(stdout, "gust %s\n", version)
+		return nil
+	}
+
+	// Cancel the whole run on the overall timeout or on Ctrl-C.
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
+	defer cancel()
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	defer stop()
+
+	client := newClient(cfg.streams)
+	totalBytes := int64(cfg.sizeMB) << 20 // MiB -> bytes
+
+	var report ui.Report
+
+	// Always resolve public network information first.
+	step(stderr, cfg.jsonOut, "Looking up network information")
 	meta, err := netinfo.Lookup(ctx, client)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Network")
-	fmt.Printf("  IP        %s\n", meta.IP)
-	fmt.Printf("  Location  %s, %s\n", meta.City, meta.Country)
-	fmt.Printf("  Provider  AS%d %s\n\n", meta.ASN, meta.Org)
-	if ipOnly {
-		return nil
+	report.Network = &meta
+
+	if !cfg.ipOnly {
+		step(stderr, cfg.jsonOut, "Measuring latency")
+		lat, err := speed.MeasureLatency(ctx, client, cfg.pings)
+		if err != nil {
+			return err
+		}
+		report.Latency = &lat
+
+		if !cfg.noDownload {
+			step(stderr, cfg.jsonOut, "Testing download speed")
+			dl, err := speed.Download(ctx, client, totalBytes, cfg.streams)
+			if err != nil {
+				return err
+			}
+			report.Download = &dl
+		}
+
+		if !cfg.noUpload {
+			step(stderr, cfg.jsonOut, "Testing upload speed")
+			ul, err := speed.Upload(ctx, client, totalBytes, cfg.streams)
+			if err != nil {
+				return err
+			}
+			report.Upload = &ul
+		}
 	}
 
-	lat, err := speed.MeasureLatency(ctx, client, pings)
-	if err != nil {
-		return err
+	if cfg.jsonOut {
+		return report.WriteJSON(stdout)
 	}
-	fmt.Printf("Latency   %.2f ms\n", float64(lat.Avg.Microseconds())/1000)
-
-	dl, err := speed.Download(ctx, client, totalBytes, streams)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Download  %.2f Mbps\n", dl.BitsPerSecond()/1e6)
-
-	ul, err := speed.Upload(ctx, client, totalBytes, streams)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Upload    %.2f Mbps\n", ul.BitsPerSecond()/1e6)
+	report.WriteText(stdout)
 	return nil
 }
 
-// newClient builds an HTTP client tuned for parallel speed tests and sets a
-// stable User-Agent, which some edge services require.
+// parseFlags interprets the command-line arguments into a config value.
+func parseFlags(args []string, stderr *os.File) (cfg config, showVersion bool, err error) {
+	fs := flag.NewFlagSet("gust", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(stderr, "gust %s — internet speed & public IP checker\n\n", version)
+		fmt.Fprintln(stderr, "Usage: gust [options]")
+		fmt.Fprintln(stderr, "\nOptions:")
+		fs.PrintDefaults()
+	}
+
+	fs.BoolVar(&cfg.jsonOut, "json", false, "output results as JSON")
+	fs.BoolVar(&cfg.ipOnly, "ip-only", false, "only show public IP / network info and exit")
+	fs.BoolVar(&cfg.noDownload, "no-download", false, "skip the download test")
+	fs.BoolVar(&cfg.noUpload, "no-upload", false, "skip the upload test")
+	fs.IntVar(&cfg.sizeMB, "size", 25, "amount of data to transfer per test, in MiB")
+	fs.IntVar(&cfg.streams, "streams", 4, "number of parallel connections per test")
+	fs.IntVar(&cfg.pings, "pings", 6, "number of latency samples")
+	fs.DurationVar(&cfg.timeout, "timeout", 60*time.Second, "overall timeout for the whole run")
+	fs.BoolVar(&showVersion, "version", false, "print version and exit")
+
+	if err = fs.Parse(args); err != nil {
+		return config{}, false, err
+	}
+	return cfg, showVersion, nil
+}
+
+// newClient builds an HTTP client tuned for parallel speed tests. Per-request
+// deadlines come from the context, so no client-level timeout is set.
 func newClient(streams int) *http.Client {
 	if streams < 1 {
 		streams = 1
 	}
-	return &http.Client{Transport: &userAgentTransport{
-		agent: "gust/" + version,
-		base: &http.Transport{
-			MaxIdleConns:        streams * 2,
-			MaxIdleConnsPerHost: streams * 2,
-			ForceAttemptHTTP2:   true,
+	return &http.Client{
+		Transport: &userAgentTransport{
+			agent: "gust/" + version,
+			base: &http.Transport{
+				MaxIdleConns:        streams * 2,
+				MaxIdleConnsPerHost: streams * 2,
+				ForceAttemptHTTP2:   true,
+			},
 		},
-	}}
+	}
 }
 
-// userAgentTransport sets a stable User-Agent on every outgoing request.
+// userAgentTransport sets a stable User-Agent on every request. Some edge
+// services reject the default Go user agent, so we identify ourselves.
 type userAgentTransport struct {
 	agent string
 	base  http.RoundTripper
@@ -104,4 +161,13 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 		req.Header.Set("User-Agent", t.agent)
 	}
 	return t.base.RoundTrip(req)
+}
+
+// step prints a progress line to stderr unless JSON output is requested, in
+// which case stdout must stay a clean, machine-readable stream.
+func step(stderr *os.File, jsonOut bool, msg string) {
+	if jsonOut {
+		return
+	}
+	fmt.Fprintf(stderr, "→ %s...\n", msg)
 }
