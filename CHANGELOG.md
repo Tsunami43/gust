@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.1] - 2026-07-04
+
+### Fixed
+- Send a browser `User-Agent` so Cloudflare no longer rejects requests with
+  `403 Forbidden`.
+
+### Added
+- Fall back to `ipwho.is` and `ip-api.com` for IP/location lookup when the
+  Cloudflare edge is unavailable.
+
 ## [1.0.0] - 2026-07-01
 
 Initial release.
