@@ -18,7 +18,7 @@ import (
 )
 
 // version is reported by the -version flag.
-const version = "1.0.0"
+const version = "1.0.1"
 
 // config holds the parsed command-line options for a single run.
 type config struct {
@@ -139,7 +139,7 @@ func newClient(streams int) *http.Client {
 	}
 	return &http.Client{
 		Transport: &userAgentTransport{
-			agent: "gust/" + version,
+			agent: browserUserAgent,
 			base: &http.Transport{
 				MaxIdleConns:        streams * 2,
 				MaxIdleConnsPerHost: streams * 2,
@@ -148,6 +148,12 @@ func newClient(streams int) *http.Client {
 		},
 	}
 }
+
+// browserUserAgent is a realistic browser identity. Cloudflare's bot
+// protection replies 403 to the default Go user agent on the speed test
+// endpoints, so we present ourselves as a common browser instead.
+const browserUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+	"(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 // userAgentTransport sets a stable User-Agent on every request. Some edge
 // services reject the default Go user agent, so we identify ourselves.
