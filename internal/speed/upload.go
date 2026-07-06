@@ -13,9 +13,15 @@ import (
 // Upload measures upload throughput by POSTing `totalBytes` of generated data
 // to the speed endpoint, split evenly across `streams` parallel connections.
 // The returned Result covers the aggregate transfer.
-func Upload(ctx context.Context, client *http.Client, totalBytes int64, streams int) (Result, error) {
+//
+// If progress is non-nil it is updated atomically with the running byte count
+// as data is sent, so a caller can render a live progress bar.
+func Upload(ctx context.Context, client *http.Client, totalBytes int64, streams int, progress *int64) (Result, error) {
 	if streams < 1 {
 		streams = 1
+	}
+	if progress == nil {
+		progress = new(int64)
 	}
 	perStream := totalBytes / int64(streams)
 	if perStream <= 0 {
@@ -24,7 +30,6 @@ func Upload(ctx context.Context, client *http.Client, totalBytes int64, streams 
 		streams = 1
 	}
 
-	var transferred int64
 	var wg sync.WaitGroup
 	errs := make(chan error, streams)
 	url := endpoint + "/__up"
@@ -35,7 +40,7 @@ func Upload(ctx context.Context, client *http.Client, totalBytes int64, streams 
 		go func() {
 			defer wg.Done()
 
-			body := &countingReader{remaining: perStream, counter: &transferred}
+			body := &countingReader{remaining: perStream, counter: progress}
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 			if err != nil {
 				errs <- err
@@ -61,7 +66,7 @@ func Upload(ctx context.Context, client *http.Client, totalBytes int64, streams 
 	if err := <-errs; err != nil {
 		return Result{}, fmt.Errorf("upload: %w", err)
 	}
-	return Result{Bytes: atomic.LoadInt64(&transferred), Elapsed: elapsed}, nil
+	return Result{Bytes: atomic.LoadInt64(progress), Elapsed: elapsed}, nil
 }
 
 // countingReader yields up to `remaining` zero bytes while atomically counting

@@ -80,7 +80,7 @@ func run(args []string, stdout, stderr *os.File) error {
 
 		if !cfg.noDownload {
 			step(stderr, cfg.jsonOut, "Testing download speed")
-			dl, err := speed.Download(ctx, client, totalBytes, cfg.streams)
+			dl, err := speed.Download(ctx, client, totalBytes, cfg.streams, nil)
 			if err != nil {
 				return err
 			}
@@ -89,7 +89,7 @@ func run(args []string, stdout, stderr *os.File) error {
 
 		if !cfg.noUpload {
 			step(stderr, cfg.jsonOut, "Testing upload speed")
-			ul, err := speed.Upload(ctx, client, totalBytes, cfg.streams)
+			ul, err := speed.Upload(ctx, client, totalBytes, cfg.streams, nil)
 			if err != nil {
 				return err
 			}

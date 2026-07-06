@@ -13,9 +13,15 @@ import (
 // Download measures download throughput by fetching `totalBytes` of random
 // data from the speed endpoint, split evenly across `streams` parallel
 // connections. The returned Result covers the aggregate transfer.
-func Download(ctx context.Context, client *http.Client, totalBytes int64, streams int) (Result, error) {
+//
+// If progress is non-nil it is updated atomically with the running byte count
+// as data arrives, so a caller can render a live progress bar.
+func Download(ctx context.Context, client *http.Client, totalBytes int64, streams int, progress *int64) (Result, error) {
 	if streams < 1 {
 		streams = 1
+	}
+	if progress == nil {
+		progress = new(int64)
 	}
 	perStream := totalBytes / int64(streams)
 	if perStream <= 0 {
@@ -24,7 +30,6 @@ func Download(ctx context.Context, client *http.Client, totalBytes int64, stream
 		streams = 1
 	}
 
-	var transferred int64
 	var wg sync.WaitGroup
 	errs := make(chan error, streams)
 
@@ -48,7 +53,7 @@ func Download(ctx context.Context, client *http.Client, totalBytes int64, stream
 			defer resp.Body.Close()
 
 			// Discard the payload while counting the bytes as they arrive.
-			if _, err := io.Copy(&countingWriter{counter: &transferred}, resp.Body); err != nil {
+			if _, err := io.Copy(&countingWriter{counter: progress}, resp.Body); err != nil {
 				errs <- err
 			}
 		}()
@@ -60,7 +65,7 @@ func Download(ctx context.Context, client *http.Client, totalBytes int64, stream
 	if err := <-errs; err != nil {
 		return Result{}, fmt.Errorf("download: %w", err)
 	}
-	return Result{Bytes: atomic.LoadInt64(&transferred), Elapsed: elapsed}, nil
+	return Result{Bytes: atomic.LoadInt64(progress), Elapsed: elapsed}, nil
 }
 
 // countingWriter discards everything written to it while atomically counting
