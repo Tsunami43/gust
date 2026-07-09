@@ -1,6 +1,9 @@
 // Command gust is a small, dependency-free CLI that reports your public IP
 // address and measures internet connection speed (latency, download and
 // upload) using the public Cloudflare speed test endpoints.
+//
+// On an interactive terminal it renders an animated, colourful interface;
+// when piped or asked for JSON it emits clean, machine-readable output.
 package main
 
 import (
@@ -18,7 +21,7 @@ import (
 )
 
 // version is reported by the -version flag.
-const version = "1.0.1"
+const version = "1.1.0"
 
 // config holds the parsed command-line options for a single run.
 type config struct {
@@ -26,6 +29,7 @@ type config struct {
 	ipOnly     bool
 	noDownload bool
 	noUpload   bool
+	noColor    bool
 	sizeMB     int
 	streams    int
 	pings      int
@@ -60,27 +64,46 @@ func run(args []string, stdout, stderr *os.File) error {
 	client := newClient(cfg.streams)
 	totalBytes := int64(cfg.sizeMB) << 20 // MiB -> bytes
 
+	// Colour and animation are used only on an interactive terminal, unless
+	// explicitly disabled or when machine-readable output is requested.
+	colorOK := !cfg.noColor && !cfg.jsonOut && os.Getenv("NO_COLOR") == ""
+	r := ui.NewRenderer(stdout, colorOK)
+	fancy := r.Fancy()
+
 	var report ui.Report
 
-	// Always resolve public network information first.
-	step(stderr, cfg.jsonOut, "Looking up network information")
-	meta, err := netinfo.Lookup(ctx, client)
-	if err != nil {
+	if fancy {
+		r.Header(version)
+	}
+
+	// Resolve public network information (with provider fallback) first.
+	var meta netinfo.Meta
+	if err := r.RunSpinner("resolving network", func() error {
+		var e error
+		meta, e = netinfo.Lookup(ctx, client)
+		return e
+	}); err != nil {
 		return err
 	}
 	report.Network = &meta
+	r.NetworkCard(meta)
 
 	if !cfg.ipOnly {
-		step(stderr, cfg.jsonOut, "Measuring latency")
-		lat, err := speed.MeasureLatency(ctx, client, cfg.pings)
-		if err != nil {
+		var lat speed.Latency
+		if err := r.RunSpinner("measuring latency", func() error {
+			var e error
+			lat, e = speed.MeasureLatency(ctx, client, cfg.pings)
+			return e
+		}); err != nil {
 			return err
 		}
 		report.Latency = &lat
+		r.LatencyLine(lat)
 
 		if !cfg.noDownload {
-			step(stderr, cfg.jsonOut, "Testing download speed")
-			dl, err := speed.Download(ctx, client, totalBytes, cfg.streams, nil)
+			dl, err := r.RunBar("Download", totalBytes, func(p *int64) (speed.Result, error) {
+				return speed.Download(ctx, client, totalBytes, cfg.streams, p)
+			})
 			if err != nil {
 				return err
 			}
@@ -88,8 +111,9 @@ func run(args []string, stdout, stderr *os.File) error {
 		}
 
 		if !cfg.noUpload {
-			step(stderr, cfg.jsonOut, "Testing upload speed")
-			ul, err := speed.Upload(ctx, client, totalBytes, cfg.streams, nil)
+			ul, err := r.RunBar("Upload", totalBytes, func(p *int64) (speed.Result, error) {
+				return speed.Upload(ctx, client, totalBytes, cfg.streams, p)
+			})
 			if err != nil {
 				return err
 			}
@@ -97,10 +121,16 @@ func run(args []string, stdout, stderr *os.File) error {
 		}
 	}
 
-	if cfg.jsonOut {
+	r.Footer()
+
+	// Fancy runs have already drawn their results live; only the plain and
+	// JSON modes need to print a report at the end.
+	switch {
+	case cfg.jsonOut:
 		return report.WriteJSON(stdout)
+	case !fancy:
+		report.WriteText(stdout)
 	}
-	report.WriteText(stdout)
 	return nil
 }
 
@@ -119,6 +149,7 @@ func parseFlags(args []string, stderr *os.File) (cfg config, showVersion bool, e
 	fs.BoolVar(&cfg.ipOnly, "ip-only", false, "only show public IP / network info and exit")
 	fs.BoolVar(&cfg.noDownload, "no-download", false, "skip the download test")
 	fs.BoolVar(&cfg.noUpload, "no-upload", false, "skip the upload test")
+	fs.BoolVar(&cfg.noColor, "no-color", false, "disable coloured and animated output")
 	fs.IntVar(&cfg.sizeMB, "size", 25, "amount of data to transfer per test, in MiB")
 	fs.IntVar(&cfg.streams, "streams", 4, "number of parallel connections per test")
 	fs.IntVar(&cfg.pings, "pings", 6, "number of latency samples")
@@ -167,13 +198,4 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 		req.Header.Set("User-Agent", t.agent)
 	}
 	return t.base.RoundTrip(req)
-}
-
-// step prints a progress line to stderr unless JSON output is requested, in
-// which case stdout must stay a clean, machine-readable stream.
-func step(stderr *os.File, jsonOut bool, msg string) {
-	if jsonOut {
-		return
-	}
-	fmt.Fprintf(stderr, "→ %s...\n", msg)
 }
