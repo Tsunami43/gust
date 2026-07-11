@@ -13,8 +13,9 @@ type Latency struct {
 	Min     time.Duration
 	Avg     time.Duration
 	Max     time.Duration
-	Jitter  time.Duration // mean absolute deviation between consecutive samples
-	Samples int
+	Jitter  time.Duration   // mean absolute deviation between consecutive samples
+	Samples int             // number of probes taken
+	Series  []time.Duration // individual round-trip times, in order
 }
 
 // MeasureLatency issues `samples` tiny requests and reports round-trip
@@ -49,7 +50,7 @@ func MeasureLatency(ctx context.Context, client *http.Client, samples int) (Late
 
 // summarise computes min/avg/max/jitter from raw round-trip samples.
 func summarise(rtts []time.Duration) Latency {
-	l := Latency{Samples: len(rtts), Min: rtts[0], Max: rtts[0]}
+	l := Latency{Samples: len(rtts), Min: rtts[0], Max: rtts[0], Series: rtts}
 
 	var sum time.Duration
 	for _, d := range rtts {
