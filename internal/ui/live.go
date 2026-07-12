@@ -90,16 +90,65 @@ func (r *Renderer) NetworkCard(m netinfo.Meta) {
 	r.line("")
 }
 
-// LatencyLine prints the finished latency measurement.
+// LatencyLine prints the finished latency measurement, including a sparkline
+// of the individual round-trip samples.
 func (r *Renderer) LatencyLine(l speed.Latency) {
 	if !r.fancy {
 		return
 	}
 	p := r.pal
 	col := latencyColor(l.Avg, p)
-	r.line(fmt.Sprintf("  %s✔%s %-9s %s%s%s   %s· jitter %s%s",
+	spark := ""
+	if s := latencySpark(l); s != "" {
+		spark = fmt.Sprintf("   %s%s%s", p.dim, s, p.reset)
+	}
+	r.line(fmt.Sprintf("  %s✔%s %-9s %s%s%s   %s· jitter %s%s%s",
 		p.green, p.reset, "Latency", col, ms(l.Avg), p.reset,
-		p.dim, ms(l.Jitter), p.reset))
+		p.dim, ms(l.Jitter), p.reset, spark))
+}
+
+// SummaryCard renders a compact quality summary once a full test has finished.
+func (r *Renderer) SummaryCard(rep Report) {
+	if !r.fancy || rep.Download == nil {
+		return
+	}
+	p := r.pal
+
+	downMbps := rep.Download.BitsPerSecond() / 1e6
+	latMs := 0.0
+	if rep.Latency != nil {
+		latMs = float64(rep.Latency.Avg.Microseconds()) / 1000
+	}
+	g := GradeResult(downMbps, latMs)
+	gc := gradeColor(g.Letter, p)
+
+	up := "—"
+	if rep.Upload != nil {
+		up = HumanBits(rep.Upload.BitsPerSecond())
+	}
+	lat := "—"
+	if rep.Latency != nil {
+		lat = ms(rep.Latency.Avg)
+	}
+
+	r.line("")
+	r.line(fmt.Sprintf("  %s %s %s  %s%s%s   %s↓%s %s   %s↑%s %s   %s%s%s",
+		gc+p.bold, g.Letter, p.reset,
+		gc, g.Label, p.reset,
+		p.green, p.reset, HumanBits(rep.Download.BitsPerSecond()),
+		p.cyan, p.reset, up,
+		p.dim, lat, p.reset))
+}
+
+// WatchLine prints a single sample line for watch mode: a timestamp label, the
+// latest download speed and a rolling sparkline of recent speeds.
+func (r *Renderer) WatchLine(label string, mbps float64, history []float64) {
+	p := r.pal
+	spark := Sparkline(history)
+	r.line(fmt.Sprintf("  %s%s%s  %s↓%s %s%8.2f Mbps%s  %s%s%s",
+		p.dim, label, p.reset,
+		p.green, p.reset, p.bold, mbps, p.reset,
+		p.cyan, spark, p.reset))
 }
 
 // RunSpinner runs fn while animating a spinner labelled with text. When fancy
@@ -239,6 +288,32 @@ func latencyColor(d time.Duration, p palette) string {
 	case d < 30*time.Millisecond:
 		return p.green
 	case d < 100*time.Millisecond:
+		return p.yellow
+	default:
+		return p.red
+	}
+}
+
+// latencySpark renders the individual latency samples as a sparkline.
+func latencySpark(l speed.Latency) string {
+	if len(l.Series) < 2 {
+		return ""
+	}
+	vals := make([]float64, len(l.Series))
+	for i, d := range l.Series {
+		vals[i] = float64(d.Microseconds()) / 1000
+	}
+	return Sparkline(vals)
+}
+
+// gradeColor maps a quality grade letter to a palette colour.
+func gradeColor(letter string, p palette) string {
+	switch letter {
+	case "A+", "A":
+		return p.green
+	case "B":
+		return p.cyan
+	case "C":
 		return p.yellow
 	default:
 		return p.red
