@@ -2,8 +2,9 @@
 // address and measures internet connection speed (latency, download and
 // upload) using the public Cloudflare speed test endpoints.
 //
-// On an interactive terminal it renders an animated, colourful interface;
-// when piped or asked for JSON it emits clean, machine-readable output.
+// Run on an interactive terminal it opens a menu-driven interface; with flags
+// or when piped it behaves as a classic one-shot command with plain-text or
+// JSON output.
 package main
 
 import (
@@ -15,38 +16,50 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/Tsunami43/gust/internal/config"
 	"github.com/Tsunami43/gust/internal/netinfo"
 	"github.com/Tsunami43/gust/internal/speed"
 	"github.com/Tsunami43/gust/internal/ui"
 )
 
 // version is reported by the -version flag.
-const version = "1.1.0"
+const version = "1.2.0"
 
-// config holds the parsed command-line options for a single run.
-type config struct {
+// options holds the parsed command-line options for a single run.
+type options struct {
 	jsonOut    bool
 	ipOnly     bool
 	noDownload bool
 	noUpload   bool
 	noColor    bool
+	noMenu     bool
+	saveConfig bool
 	sizeMB     int
 	streams    int
 	pings      int
+	watch      time.Duration
 	timeout    time.Duration
 }
 
+// plan selects which measurements a single execution performs.
+type plan struct {
+	latency  bool
+	download bool
+	upload   bool
+}
+
 func main() {
-	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
+	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "gust: "+err.Error())
 		os.Exit(1)
 	}
 }
 
-// run parses flags, performs the requested measurements and writes the report.
-// It is separated from main so behaviour can be exercised in tests.
-func run(args []string, stdout, stderr *os.File) error {
-	cfg, showVersion, err := parseFlags(args, stderr)
+// run wires configuration, flags and I/O together and dispatches to the menu,
+// watch or one-shot mode. It is separated from main so it can be tested.
+func run(args []string, stdin, stdout, stderr *os.File) error {
+	base, _ := config.Load() // fall back to defaults on error
+	opt, showVersion, err := parseFlags(args, stderr, base)
 	if err != nil {
 		return err
 	}
@@ -54,88 +67,134 @@ func run(args []string, stdout, stderr *os.File) error {
 		fmt.Fprintf(stdout, "gust %s\n", version)
 		return nil
 	}
+	if opt.saveConfig {
+		return config.Save(config.Config{
+			SizeMB: opt.sizeMB, Streams: opt.streams, Pings: opt.pings, NoColor: opt.noColor,
+		})
+	}
 
-	// Cancel the whole run on the overall timeout or on Ctrl-C.
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), opt.timeout)
 	defer cancel()
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
-	client := newClient(cfg.streams)
-	totalBytes := int64(cfg.sizeMB) << 20 // MiB -> bytes
-
-	// Colour and animation are used only on an interactive terminal, unless
-	// explicitly disabled or when machine-readable output is requested.
-	colorOK := !cfg.noColor && !cfg.jsonOut && os.Getenv("NO_COLOR") == ""
-	r := ui.NewRenderer(stdout, colorOK)
-	fancy := r.Fancy()
-
-	var report ui.Report
-
-	if fancy {
-		r.Header(version)
+	colorOK := !opt.noColor && !opt.jsonOut && os.Getenv("NO_COLOR") == ""
+	a := &app{
+		opt:    opt,
+		client: newClient(opt.streams),
+		in:     stdin,
+		out:    stdout,
+		r:      ui.NewRenderer(stdout, colorOK),
 	}
 
-	// Resolve public network information (with provider fallback) first.
-	var meta netinfo.Meta
-	if err := r.RunSpinner("resolving network", func() error {
-		var e error
-		meta, e = netinfo.Lookup(ctx, client)
-		return e
-	}); err != nil {
+	switch {
+	case opt.watch > 0:
+		return a.runWatch(ctx)
+	case a.wantsMenu(stdin, stdout):
+		return a.runMenu(ctx)
+	default:
+		return a.runOnce(ctx)
+	}
+}
+
+// app carries the shared state for one invocation.
+type app struct {
+	opt    options
+	client *http.Client
+	in     *os.File
+	out    *os.File
+	r      *ui.Renderer
+}
+
+// total returns the per-test transfer size in bytes.
+func (a *app) total() int64 { return int64(a.opt.sizeMB) << 20 }
+
+// wantsMenu reports whether the interactive menu should be shown: a bare,
+// colourful, fully-interactive terminal session with no action flags.
+func (a *app) wantsMenu(stdin, stdout *os.File) bool {
+	if a.opt.noMenu || a.opt.jsonOut || !a.r.Fancy() || !isTerminal(stdin) {
+		return false
+	}
+	return !a.opt.ipOnly && !a.opt.noDownload && !a.opt.noUpload
+}
+
+// runOnce performs a single classic measurement based on the flags.
+func (a *app) runOnce(ctx context.Context) error {
+	a.r.Header(version)
+	p := plan{
+		latency:  !a.opt.ipOnly,
+		download: !a.opt.ipOnly && !a.opt.noDownload,
+		upload:   !a.opt.ipOnly && !a.opt.noUpload,
+	}
+	rep, err := a.execute(ctx, p)
+	if err != nil {
 		return err
 	}
-	report.Network = &meta
-	r.NetworkCard(meta)
+	a.r.Footer()
 
-	if !cfg.ipOnly {
-		var lat speed.Latency
-		if err := r.RunSpinner("measuring latency", func() error {
-			var e error
-			lat, e = speed.MeasureLatency(ctx, client, cfg.pings)
-			return e
-		}); err != nil {
-			return err
-		}
-		report.Latency = &lat
-		r.LatencyLine(lat)
-
-		if !cfg.noDownload {
-			dl, err := r.RunBar("Download", totalBytes, func(p *int64) (speed.Result, error) {
-				return speed.Download(ctx, client, totalBytes, cfg.streams, p)
-			})
-			if err != nil {
-				return err
-			}
-			report.Download = &dl
-		}
-
-		if !cfg.noUpload {
-			ul, err := r.RunBar("Upload", totalBytes, func(p *int64) (speed.Result, error) {
-				return speed.Upload(ctx, client, totalBytes, cfg.streams, p)
-			})
-			if err != nil {
-				return err
-			}
-			report.Upload = &ul
-		}
-	}
-
-	r.Footer()
-
-	// Fancy runs have already drawn their results live; only the plain and
-	// JSON modes need to print a report at the end.
 	switch {
-	case cfg.jsonOut:
-		return report.WriteJSON(stdout)
-	case !fancy:
-		report.WriteText(stdout)
+	case a.opt.jsonOut:
+		return rep.WriteJSON(a.out)
+	case !a.r.Fancy():
+		rep.WriteText(a.out)
 	}
 	return nil
 }
 
-// parseFlags interprets the command-line arguments into a config value.
-func parseFlags(args []string, stderr *os.File) (cfg config, showVersion bool, err error) {
+// execute resolves network info and runs the measurements selected by p,
+// rendering each result as it completes.
+func (a *app) execute(ctx context.Context, p plan) (ui.Report, error) {
+	var rep ui.Report
+
+	var meta netinfo.Meta
+	if err := a.r.RunSpinner("resolving network", func() error {
+		var e error
+		meta, e = netinfo.Lookup(ctx, a.client)
+		return e
+	}); err != nil {
+		return rep, err
+	}
+	rep.Network = &meta
+	a.r.NetworkCard(meta)
+
+	if p.latency {
+		var lat speed.Latency
+		if err := a.r.RunSpinner("measuring latency", func() error {
+			var e error
+			lat, e = speed.MeasureLatency(ctx, a.client, a.opt.pings)
+			return e
+		}); err != nil {
+			return rep, err
+		}
+		rep.Latency = &lat
+		a.r.LatencyLine(lat)
+	}
+	if p.download {
+		dl, err := a.r.RunBar("Download", a.total(), func(pr *int64) (speed.Result, error) {
+			return speed.Download(ctx, a.client, a.total(), a.opt.streams, pr)
+		})
+		if err != nil {
+			return rep, err
+		}
+		rep.Download = &dl
+	}
+	if p.upload {
+		ul, err := a.r.RunBar("Upload", a.total(), func(pr *int64) (speed.Result, error) {
+			return speed.Upload(ctx, a.client, a.total(), a.opt.streams, pr)
+		})
+		if err != nil {
+			return rep, err
+		}
+		rep.Upload = &ul
+	}
+
+	a.r.SummaryCard(rep)
+	return rep, nil
+}
+
+// parseFlags interprets the command-line arguments into options, seeding the
+// defaults from the persisted configuration.
+func parseFlags(args []string, stderr *os.File, base config.Config) (opt options, showVersion bool, err error) {
 	fs := flag.NewFlagSet("gust", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
@@ -145,21 +204,24 @@ func parseFlags(args []string, stderr *os.File) (cfg config, showVersion bool, e
 		fs.PrintDefaults()
 	}
 
-	fs.BoolVar(&cfg.jsonOut, "json", false, "output results as JSON")
-	fs.BoolVar(&cfg.ipOnly, "ip-only", false, "only show public IP / network info and exit")
-	fs.BoolVar(&cfg.noDownload, "no-download", false, "skip the download test")
-	fs.BoolVar(&cfg.noUpload, "no-upload", false, "skip the upload test")
-	fs.BoolVar(&cfg.noColor, "no-color", false, "disable coloured and animated output")
-	fs.IntVar(&cfg.sizeMB, "size", 25, "amount of data to transfer per test, in MiB")
-	fs.IntVar(&cfg.streams, "streams", 4, "number of parallel connections per test")
-	fs.IntVar(&cfg.pings, "pings", 6, "number of latency samples")
-	fs.DurationVar(&cfg.timeout, "timeout", 60*time.Second, "overall timeout for the whole run")
+	fs.BoolVar(&opt.jsonOut, "json", false, "output results as JSON")
+	fs.BoolVar(&opt.ipOnly, "ip-only", false, "only show public IP / network info and exit")
+	fs.BoolVar(&opt.noDownload, "no-download", false, "skip the download test")
+	fs.BoolVar(&opt.noUpload, "no-upload", false, "skip the upload test")
+	fs.BoolVar(&opt.noColor, "no-color", base.NoColor, "disable coloured and animated output")
+	fs.BoolVar(&opt.noMenu, "no-menu", false, "never open the interactive menu")
+	fs.BoolVar(&opt.saveConfig, "save-config", false, "save the given size/streams/pings as defaults and exit")
+	fs.IntVar(&opt.sizeMB, "size", base.SizeMB, "amount of data to transfer per test, in MiB")
+	fs.IntVar(&opt.streams, "streams", base.Streams, "number of parallel connections per test")
+	fs.IntVar(&opt.pings, "pings", base.Pings, "number of latency samples")
+	fs.DurationVar(&opt.watch, "watch", 0, "repeat the download test on this interval (e.g. 5s); 0 disables")
+	fs.DurationVar(&opt.timeout, "timeout", 60*time.Second, "overall timeout for a single measurement")
 	fs.BoolVar(&showVersion, "version", false, "print version and exit")
 
 	if err = fs.Parse(args); err != nil {
-		return config{}, false, err
+		return options{}, false, err
 	}
-	return cfg, showVersion, nil
+	return opt, showVersion, nil
 }
 
 // newClient builds an HTTP client tuned for parallel speed tests. Per-request
@@ -178,6 +240,15 @@ func newClient(streams int) *http.Client {
 			},
 		},
 	}
+}
+
+// isTerminal reports whether f is attached to a character device (a TTY).
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 // browserUserAgent is a realistic browser identity. Cloudflare's bot
