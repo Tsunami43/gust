@@ -27,25 +27,42 @@ func MeasureLatency(ctx context.Context, client *http.Client, samples int) (Late
 	}
 	url := fmt.Sprintf("%s/__down?bytes=0", endpoint)
 
+	// Warm up the connection first. The initial request pays for DNS, the TCP
+	// handshake and the TLS handshake; charging that to the first sample would
+	// inflate the average and jitter by hundreds of milliseconds. Its timing is
+	// discarded so every recorded sample reuses the established connection.
+	if _, err := probe(ctx, client, url); err != nil {
+		return Latency{}, err
+	}
+
 	rtts := make([]time.Duration, 0, samples)
 	for i := 0; i < samples; i++ {
-		start := time.Now()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		d, err := probe(ctx, client, url)
 		if err != nil {
-			return Latency{}, fmt.Errorf("build latency request: %w", err)
+			return Latency{}, err
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return Latency{}, fmt.Errorf("latency probe: %w", err)
-		}
-		// Drain and close so the connection can be reused for the next probe.
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-
-		rtts = append(rtts, time.Since(start))
+		rtts = append(rtts, d)
 	}
 	return summarise(rtts), nil
+}
+
+// probe issues a single zero-byte request and returns its round-trip time.
+func probe(ctx context.Context, client *http.Client, url string) (time.Duration, error) {
+	start := time.Now()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("build latency request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("latency probe: %w", err)
+	}
+	// Drain and close so the connection can be reused for the next probe.
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+
+	return time.Since(start), nil
 }
 
 // summarise computes min/avg/max/jitter from raw round-trip samples.
