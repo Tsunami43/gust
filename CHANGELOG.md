@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.3.1] - 2026-07-14
+
+### Fixed
+- Warm up the connection before latency sampling. The first probe used to
+  include DNS/TCP/TLS setup, which inflated the reported average and jitter by
+  hundreds of milliseconds; samples now reflect the true round-trip time.
+
 ## [1.3.0] - 2026-07-14
 
 ### Changed

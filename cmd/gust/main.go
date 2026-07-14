@@ -23,7 +23,7 @@ import (
 )
 
 // version is reported by the -version flag.
-const version = "1.3.0"
+const version = "1.3.1"
 
 // options holds the parsed command-line options for a single run.
 type options struct {
