@@ -27,9 +27,10 @@ var mainMenuItems = []tui.Item{
 
 // runMenu drives the interactive, menu-based interface.
 func (a *app) runMenu(ctx context.Context) error {
-	menu := tui.NewMenu("⚡ gust — main menu", mainMenuItems, a.in, a.out)
+	menu := tui.NewMenu("main menu", mainMenuItems, a.in, a.out)
 	for {
 		fmt.Fprint(a.out, clearScreen)
+		a.r.Logo("internet speed test · v" + version)
 		idx, ok := menu.Run()
 		if !ok {
 			return nil
