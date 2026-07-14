@@ -9,6 +9,7 @@ import (
 
 	"github.com/Tsunami43/gust/internal/netinfo"
 	"github.com/Tsunami43/gust/internal/speed"
+	"github.com/Tsunami43/gust/internal/theme"
 )
 
 // barWidth is the number of cells used to draw throughput progress bars.
@@ -52,17 +53,12 @@ func (r *Renderer) nl() { fmt.Fprint(r.out, "\n") }
 // clear erases the current line and returns the cursor to its start.
 func (r *Renderer) clear() { fmt.Fprint(r.out, "\r\033[K") }
 
-// Header prints the program banner.
+// Header prints the program logo and tagline.
 func (r *Renderer) Header(version string) {
 	if !r.fancy {
 		return
 	}
-	p := r.pal
-	r.line("")
-	r.line(fmt.Sprintf("  %s⚡%s %sgust%s  %sv%s%s  %s·%s  %sinternet speed test%s",
-		p.yellow, p.reset, p.bold, p.reset, p.dim, version, p.reset,
-		p.dim, p.reset, p.dim, p.reset))
-	r.line("")
+	r.Logo("internet speed test · v" + version)
 }
 
 // Footer adds trailing breathing room after the results.
@@ -100,10 +96,10 @@ func (r *Renderer) LatencyLine(l speed.Latency) {
 	col := latencyColor(l.Avg, p)
 	spark := ""
 	if s := latencySpark(l); s != "" {
-		spark = fmt.Sprintf("   %s%s%s", p.dim, s, p.reset)
+		spark = fmt.Sprintf("   %s%s%s", p.accent, s, p.reset)
 	}
-	r.line(fmt.Sprintf("  %s✔%s %-9s %s%s%s   %s· jitter %s%s%s",
-		p.green, p.reset, "Latency", col, ms(l.Avg), p.reset,
+	r.line(fmt.Sprintf("  %s%s%s %-9s %s%s%s   %s· jitter %s%s%s",
+		p.green, theme.Done, p.reset, "Latency", col, ms(l.Avg), p.reset,
 		p.dim, ms(l.Jitter), p.reset, spark))
 }
 
@@ -132,12 +128,12 @@ func (r *Renderer) SummaryCard(rep Report) {
 	}
 
 	r.line("")
-	r.line(fmt.Sprintf("  %s %s %s  %s%s%s   %s↓%s %s   %s↑%s %s   %s%s%s",
-		gc+p.bold, g.Letter, p.reset,
+	r.line(fmt.Sprintf("  %s%s %s%s  %s%s%s   %s%s%s %s%s%s   %s%s%s %s%s%s   %s%s %s%s",
+		gc+p.bold, g.Letter, p.reset, "",
 		gc, g.Label, p.reset,
-		p.green, p.reset, HumanBits(rep.Download.BitsPerSecond()),
-		p.cyan, p.reset, up,
-		p.dim, lat, p.reset))
+		p.green, theme.Down, p.reset, p.text, HumanBits(rep.Download.BitsPerSecond()), p.reset,
+		p.accent, theme.Up, p.reset, p.text, up, p.reset,
+		p.dim, theme.Dot, lat, p.reset))
 }
 
 // WatchLine prints a single sample line for watch mode: a timestamp label, the
@@ -145,10 +141,10 @@ func (r *Renderer) SummaryCard(rep Report) {
 func (r *Renderer) WatchLine(label string, mbps float64, history []float64) {
 	p := r.pal
 	spark := Sparkline(history)
-	r.line(fmt.Sprintf("  %s%s%s  %s↓%s %s%8.2f Mbps%s  %s%s%s",
+	r.line(fmt.Sprintf("  %s%s%s  %s%s%s %s%8.2f Mbps%s  %s%s%s",
 		p.dim, label, p.reset,
-		p.green, p.reset, p.bold, mbps, p.reset,
-		p.cyan, spark, p.reset))
+		p.green, theme.Down, p.reset, p.text+p.bold, mbps, p.reset,
+		p.accent, spark, p.reset))
 }
 
 // RunSpinner runs fn while animating a spinner labelled with text. When fancy
@@ -206,9 +202,9 @@ func (r *Renderer) RunBar(label string, target int64, fn func(progress *int64) (
 				r.clear()
 				return o.res, o.err
 			}
-			r.draw(fmt.Sprintf("  %s✔%s %-9s %s  %s%s%s",
-				p.green, p.reset, label, renderBar(1, barWidth, p),
-				p.bold, HumanBits(o.res.BitsPerSecond()), p.reset))
+			r.draw(fmt.Sprintf("  %s%s%s %-9s %s  %s%s%s%s",
+				p.green, theme.Done, p.reset, label, renderBar(1, barWidth, p),
+				p.text+p.bold, HumanBits(o.res.BitsPerSecond()), p.reset, ""))
 			r.nl()
 			return o.res, nil
 		case <-ticker.C:
@@ -256,18 +252,18 @@ func (r *Renderer) card(title string, rows [][2]string) {
 		dashes = 1
 	}
 	r.line(fmt.Sprintf("  %s╭─ %s%s%s %s%s╮%s",
-		p.dim, p.reset+p.bold, title, p.reset+p.dim, strings.Repeat("─", dashes), p.dim, p.reset))
+		p.rule, p.accent+p.bold, title, p.reset+p.rule, strings.Repeat("─", dashes), p.rule, p.reset))
 
 	// Content rows.
 	for i, row := range rows {
 		pad := strings.Repeat(" ", inner-visibleLen(plains[i]))
 		content := fmt.Sprintf("%s%-*s%s   %s%s%s",
-			p.dim, labelW, row[0], p.reset, p.bold, row[1], p.reset)
-		r.line(fmt.Sprintf("  %s│%s %s%s %s│%s", p.dim, p.reset, content, pad, p.dim, p.reset))
+			p.dim, labelW, row[0], p.reset, p.text+p.bold, row[1], p.reset)
+		r.line(fmt.Sprintf("  %s│%s %s%s %s│%s", p.rule, p.reset, content, pad, p.rule, p.reset))
 	}
 
 	// Bottom border.
-	r.line(fmt.Sprintf("  %s╰%s╯%s", p.dim, strings.Repeat("─", inner+2), p.reset))
+	r.line(fmt.Sprintf("  %s╰%s╯%s", p.rule, strings.Repeat("─", inner+2), p.reset))
 }
 
 // serverLine joins the edge PoP, HTTP protocol and provider name of the meta

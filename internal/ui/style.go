@@ -3,14 +3,17 @@ package ui
 import (
 	"os"
 	"strings"
+
+	"github.com/Tsunami43/gust/internal/theme"
 )
 
 // palette holds the ANSI escape codes used for styling. When colour is
 // disabled every field is an empty string, so styled output degrades to plain
-// text automatically.
+// text automatically. Colours follow the shared violet theme.
 type palette struct {
 	reset, bold, dim                  string
 	red, green, yellow, cyan, magenta string
+	accent, alt, rule, text           string
 }
 
 // newPalette returns a populated palette when enabled, or an all-empty palette
@@ -20,14 +23,18 @@ func newPalette(enabled bool) palette {
 		return palette{}
 	}
 	return palette{
-		reset:   "\033[0m",
-		bold:    "\033[1m",
-		dim:     "\033[2m",
-		red:     "\033[31m",
-		green:   "\033[32m",
-		yellow:  "\033[33m",
-		cyan:    "\033[36m",
-		magenta: "\033[35m",
+		reset:   theme.Reset,
+		bold:    theme.Bold,
+		dim:     theme.Dim,
+		red:     theme.FG(theme.Bad),
+		green:   theme.FG(theme.Good),
+		yellow:  theme.FG(theme.Warn),
+		cyan:    theme.FG(theme.Accent),
+		magenta: theme.FG(theme.Bright),
+		accent:  theme.FG(theme.Accent),
+		alt:     theme.FG(theme.Alt),
+		rule:    theme.FG(theme.Rule),
+		text:    theme.FG(theme.Text),
 	}
 }
 
@@ -70,6 +77,6 @@ func renderBar(fraction float64, width int, p palette) string {
 		fraction = 1
 	}
 	filled := int(fraction*float64(width) + 0.5)
-	return p.cyan + strings.Repeat("█", filled) +
-		p.dim + strings.Repeat("░", width-filled) + p.reset
+	return p.accent + strings.Repeat("█", filled) +
+		p.rule + strings.Repeat("░", width-filled) + p.reset
 }
