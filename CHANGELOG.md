@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.3.0] - 2026-07-14
+
+### Changed
+- Reworked the interface around a calm violet colour theme (24-bit colour):
+  a gradient GUST word-mark, `❯` pointer, muted rule dividers and accent bars.
+- Menu, cards, latency line, summary and watch view restyled to match.
+
+### Added
+- Shared `theme` package with the palette and icon set.
+
 ## [1.2.0] - 2026-07-14
 
 ### Added

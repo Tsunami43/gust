@@ -59,9 +59,16 @@ gust
 ```
 
 ```
-  ⚡ gust — main menu
+   ██████╗ ██╗   ██╗███████╗████████╗
+  ██╔════╝ ██║   ██║██╔════╝╚══██╔══╝
+  ██║  ███╗██║   ██║███████╗   ██║
+  ██║   ██║██║   ██║╚════██║   ██║
+  ╚██████╔╝╚██████╔╝███████║   ██║
+   ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝
+  internet speed test · v1.3.0
 
-  ▸ Full test       latency + download + upload
+  main menu
+  ❯ Full test       latency + download + upload
     Download only   measure download speed
     Upload only     measure upload speed
     Ping            latency and jitter
@@ -69,8 +76,12 @@ gust
     Settings        size, streams, pings
     Quit            exit gust
 
-  ↑/↓ move · enter select · q back
+  ↑↓ move   ↵ select   q back
 ```
+
+The interface uses a calm violet colour theme with a gradient word-mark, a
+`❯` pointer and sparklines — colours are 24-bit and shown on any modern
+terminal.
 
 A finished full test looks like this:
 
@@ -82,11 +93,11 @@ A finished full test looks like this:
   │ Server     TXL · HTTP/2.0 · cloudflare       │
   ╰──────────────────────────────────────────────╯
 
-  ✔ Latency   12.34 ms   · jitter 0.70 ms   ▂▃▁▂▄▁
-  ✔ Download  ██████████████████████  94.21 Mbps
-  ✔ Upload    ██████████████████████  18.44 Mbps
+  ✓ Latency   12.34 ms   · jitter 0.70 ms   ▂▃▁▂▄▁
+  ✓ Download  ██████████████████████  94.21 Mbps
+  ✓ Upload    ██████████████████████  18.44 Mbps
 
-   A  great   ↓ 94.21 Mbps   ↑ 18.44 Mbps   12.34 ms
+   A  great   ↓ 94.21 Mbps   ↑ 18.44 Mbps   · 12.34 ms
 ```
 
 ### One-shot & scripting
