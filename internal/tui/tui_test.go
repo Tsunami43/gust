@@ -52,7 +52,7 @@ func TestMenuRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := string(data)
-	for _, want := range []string{"pick one", "Alpha", "Beta", "▸"} {
+	for _, want := range []string{"pick one", "Alpha", "Beta", "❯"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rendered frame missing %q\n%s", want, out)
 		}

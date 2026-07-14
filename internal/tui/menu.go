@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"os"
+
+	"github.com/Tsunami43/gust/internal/theme"
 )
 
 // Item is a selectable menu entry.
@@ -66,17 +68,20 @@ func (m *Menu) render(sel int, first bool) {
 	if !first {
 		fmt.Fprintf(m.out, "\033[%dA", m.lineCount())
 	}
-	fmt.Fprintf(m.out, "\r\033[K  %s\n", bold(m.Title))
+	title := theme.FG(theme.Accent) + theme.Bold + m.Title + theme.Reset
+	fmt.Fprintf(m.out, "\r\033[K  %s\n", title)
 	for i, it := range m.Items {
-		pointer, label := "  ", it.Label
+		marker, label := "  ", dim(it.Label)
 		if i == sel {
-			pointer, label = cyan("▸ "), cyan(it.Label)
+			marker = theme.FG(theme.Accent) + theme.Pointer + theme.Reset + " "
+			label = theme.FG(theme.Accent) + theme.Bold + it.Label + theme.Reset
 		}
-		line := "  " + pointer + label
+		line := "  " + marker + label
 		if it.Desc != "" {
-			line += dim("  " + it.Desc)
+			line += "  " + dim(it.Desc)
 		}
 		fmt.Fprintf(m.out, "\r\033[K%s\n", line)
 	}
-	fmt.Fprintf(m.out, "\r\033[K  %s\n", dim("↑/↓ move · enter select · q back"))
+	hint := alt("↑↓") + dim(" move") + "   " + alt("↵") + dim(" select") + "   " + alt("q") + dim(" back")
+	fmt.Fprintf(m.out, "\r\033[K  %s\n", hint)
 }
