@@ -35,9 +35,9 @@ func newPalette(enabled bool) palette {
 	}
 }
 
-// isTerminal reports whether f is attached to a character device (a TTY).
+// IsTerminal reports whether f is attached to a character device (a TTY).
 // It relies only on the standard library, keeping gust dependency-free.
-func isTerminal(f *os.File) bool {
+func IsTerminal(f *os.File) bool {
 	fi, err := f.Stat()
 	if err != nil {
 		return false

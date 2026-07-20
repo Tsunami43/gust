@@ -112,7 +112,7 @@ func (a *app) total() int64 { return int64(a.opt.sizeMB) << 20 }
 // wantsMenu reports whether the interactive menu should be shown: a bare,
 // colourful, fully-interactive terminal session with no action flags.
 func (a *app) wantsMenu(stdin, stdout *os.File) bool {
-	if a.opt.noMenu || a.opt.jsonOut || !a.r.Fancy() || !isTerminal(stdin) {
+	if a.opt.noMenu || a.opt.jsonOut || !a.r.Fancy() || !ui.IsTerminal(stdin) {
 		return false
 	}
 	return !a.opt.ipOnly && !a.opt.noDownload && !a.opt.noUpload
@@ -242,23 +242,13 @@ func newClient(streams int) *http.Client {
 	}
 }
 
-// isTerminal reports whether f is attached to a character device (a TTY).
-func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
-}
-
 // browserUserAgent is a realistic browser identity. Cloudflare's bot
 // protection replies 403 to the default Go user agent on the speed test
 // endpoints, so we present ourselves as a common browser instead.
 const browserUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
 	"(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-// userAgentTransport sets a stable User-Agent on every request. Some edge
-// services reject the default Go user agent, so we identify ourselves.
+// userAgentTransport sets browserUserAgent on every request that lacks one.
 type userAgentTransport struct {
 	agent string
 	base  http.RoundTripper

@@ -34,7 +34,7 @@ type Renderer struct {
 // NewRenderer builds a Renderer. Fancy output is enabled only when colour is
 // requested and the destination is an interactive terminal.
 func NewRenderer(out *os.File, color bool) *Renderer {
-	fancy := color && isTerminal(out)
+	fancy := color && IsTerminal(out)
 	return &Renderer{out: out, fancy: fancy, pal: newPalette(fancy)}
 }
 
