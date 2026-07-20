@@ -62,7 +62,9 @@ func (a *app) runMenu(ctx context.Context) error {
 			fmt.Fprintln(a.out, "  error: "+err.Error())
 		}
 		fmt.Fprintln(a.out, "\n  press any key to return to the menu…")
-		tui.WaitKey(a.in)
+		if tui.WaitKey(a.in) == tui.KeyCtrlC {
+			return nil
+		}
 	}
 }
 
@@ -110,16 +112,7 @@ func (a *app) runWatch(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		var meta netinfo.Meta
-		if len(history) == 0 {
-			// Resolve and show network info once, on the first iteration.
-			if m, err := netinfo.Lookup(ctx, a.client); err == nil {
-				meta = m
-				a.r.NetworkCard(meta)
-			}
-		}
-
-		dl, err := speed.Download(ctx, a.client, a.total(), a.opt.streams, nil)
+		dl, err := a.watchOnce(ctx, len(history) == 0)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -139,6 +132,21 @@ func (a *app) runWatch(ctx context.Context) error {
 			return nil
 		}
 	}
+}
+
+// watchOnce measures download speed for a single watch iteration, bounded by
+// the configured per-measurement timeout. When first is set it also resolves
+// and renders the network info card.
+func (a *app) watchOnce(ctx context.Context, first bool) (speed.Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, a.opt.timeout)
+	defer cancel()
+
+	if first {
+		if meta, err := netinfo.Lookup(ctx, a.client); err == nil {
+			a.r.NetworkCard(meta)
+		}
+	}
+	return speed.Download(ctx, a.client, a.total(), a.opt.streams, nil)
 }
 
 // cycleInt returns the value after cur in opts, wrapping around. If cur is not

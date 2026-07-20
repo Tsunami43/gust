@@ -73,9 +73,10 @@ func run(args []string, stdin, stdout, stderr *os.File) error {
 		})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), opt.timeout)
-	defer cancel()
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	// The root context is cancelled only by Ctrl-C: it spans the whole session,
+	// which in menu mode outlives any single measurement. The -timeout budget is
+	// applied per measurement instead, in execute and runWatch.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	colorOK := !opt.noColor && !opt.jsonOut && os.Getenv("NO_COLOR") == ""
@@ -145,6 +146,9 @@ func (a *app) runOnce(ctx context.Context) error {
 // rendering each result as it completes.
 func (a *app) execute(ctx context.Context, p plan) (ui.Report, error) {
 	var rep ui.Report
+
+	ctx, cancel := context.WithTimeout(ctx, a.opt.timeout)
+	defer cancel()
 
 	var meta netinfo.Meta
 	if err := a.r.RunSpinner("resolving network", func() error {

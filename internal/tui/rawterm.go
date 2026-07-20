@@ -16,8 +16,10 @@ func rawMode() (restore func(), err error) {
 	}
 	// -echo: do not print typed keys.
 	// -icanon: deliver input byte-by-byte instead of line-by-line.
+	// -isig: deliver Ctrl-C as byte 3 rather than as SIGINT, so a menu blocked
+	// in readKey can act on it immediately instead of waiting for the next key.
 	// min 1 time 0: each read blocks until at least one byte is available.
-	if _, err := stty("-echo", "-icanon", "min", "1", "time", "0"); err != nil {
+	if _, err := stty("-echo", "-icanon", "-isig", "min", "1", "time", "0"); err != nil {
 		return func() {}, err
 	}
 	return func() { _, _ = stty(saved) }, nil
@@ -59,13 +61,14 @@ func readKey(in *os.File) Key {
 	return decode(buf[:n])
 }
 
-// WaitKey briefly enters raw mode to wait for a single keypress. It is used to
-// pause after showing results before returning to a menu.
-func WaitKey(in *os.File) {
+// WaitKey briefly enters raw mode to wait for a single keypress and returns
+// the key pressed. It is used to pause after showing results before returning
+// to a menu; callers inspect the key so Ctrl-C still quits from that pause.
+func WaitKey(in *os.File) Key {
 	restore, err := rawMode()
 	if err != nil {
-		return
+		return KeyUnknown
 	}
 	defer restore()
-	readKey(in)
+	return readKey(in)
 }
