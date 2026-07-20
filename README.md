@@ -17,20 +17,16 @@ output.
 
 Written in pure Go: **no third-party dependencies**, just the standard library.
 
----
-
 ## Features
 
-- 🌍 Public IP, ASN, provider and location (with automatic provider fallback)
-- ⏱️ Latency, jitter and a per-sample sparkline
-- ⬇️⬆️ Download & upload throughput over parallel connections
-- 🎛️ Interactive menu — pick a test, tweak settings, all with arrow keys
-- 📈 `watch` mode with a rolling speed sparkline
-- 🏅 Quality grade (A+…E) summarising the result
-- 💾 Persistent defaults in `~/.config/gust/config.json`
-- 🧾 Clean plain-text and JSON output for scripts
-
----
+- Public IP, ASN, provider and location (with automatic provider fallback)
+- Latency, jitter and a per-sample sparkline
+- Download & upload throughput over parallel connections
+- Interactive menu — pick a test, tweak settings, all with arrow keys
+- `watch` mode with a rolling speed sparkline
+- Quality grade (A+…E) summarising the result
+- Persistent defaults in `~/.config/gust/config.json`
+- Plain-text and JSON output for scripts
 
 ## Install
 
@@ -47,8 +43,6 @@ git clone https://github.com/Tsunami43/gust.git
 cd gust
 make build      # or: go build -o gust ./cmd/gust
 ```
-
----
 
 ## Usage
 
@@ -134,8 +128,6 @@ gust -size 50 -streams 8 -pings 10 -save-config
 
 Defaults are stored in `~/.config/gust/config.json` and reused on every run.
 
----
-
 ## Options
 
 | Flag           | Default | Description                                      |
@@ -155,8 +147,6 @@ Defaults are stored in `~/.config/gust/config.json` and reused on every run.
 | `-version`     | `false` | Print version and exit.                          |
 
 Press `Ctrl-C` to cancel at any time.
-
----
 
 ## Contributing
 
