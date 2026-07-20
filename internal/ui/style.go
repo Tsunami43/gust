@@ -11,9 +11,9 @@ import (
 // disabled every field is an empty string, so styled output degrades to plain
 // text automatically. Colours follow the shared violet theme.
 type palette struct {
-	reset, bold, dim                  string
-	red, green, yellow, cyan, magenta string
-	accent, alt, rule, text           string
+	reset, bold, dim   string
+	red, green, yellow string
+	accent, rule, text string
 }
 
 // newPalette returns a populated palette when enabled, or an all-empty palette
@@ -23,18 +23,15 @@ func newPalette(enabled bool) palette {
 		return palette{}
 	}
 	return palette{
-		reset:   theme.Reset,
-		bold:    theme.Bold,
-		dim:     theme.Dim,
-		red:     theme.FG(theme.Bad),
-		green:   theme.FG(theme.Good),
-		yellow:  theme.FG(theme.Warn),
-		cyan:    theme.FG(theme.Accent),
-		magenta: theme.FG(theme.Bright),
-		accent:  theme.FG(theme.Accent),
-		alt:     theme.FG(theme.Alt),
-		rule:    theme.FG(theme.Rule),
-		text:    theme.FG(theme.Text),
+		reset:  theme.Reset,
+		bold:   theme.Bold,
+		dim:    theme.Dim,
+		red:    theme.FG(theme.Bad),
+		green:  theme.FG(theme.Good),
+		yellow: theme.FG(theme.Warn),
+		accent: theme.FG(theme.Accent),
+		rule:   theme.FG(theme.Rule),
+		text:   theme.FG(theme.Text),
 	}
 }
 

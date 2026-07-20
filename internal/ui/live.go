@@ -167,7 +167,7 @@ func (r *Renderer) RunSpinner(text string, fn func() error) error {
 			return err
 		case <-ticker.C:
 			sp := string(spinnerFrames[frame%len(spinnerFrames)])
-			r.draw(fmt.Sprintf("  %s%s%s %s%s…%s", p.cyan, sp, p.reset, p.dim, text, p.reset))
+			r.draw(fmt.Sprintf("  %s%s%s %s%s…%s", p.accent, sp, p.reset, p.dim, text, p.reset))
 		}
 	}
 }
@@ -219,7 +219,7 @@ func (r *Renderer) RunBar(label string, target int64, fn func(progress *int64) (
 			}
 			sp := string(spinnerFrames[frame%len(spinnerFrames)])
 			r.draw(fmt.Sprintf("  %s%s%s %-9s %s  %s%3d%%%s  %s%s%s",
-				p.cyan, sp, p.reset, label, renderBar(frac, barWidth, p),
+				p.accent, sp, p.reset, label, renderBar(frac, barWidth, p),
 				p.dim, int(frac*100), p.reset, p.dim, HumanBits(bps), p.reset))
 		}
 	}
@@ -308,7 +308,7 @@ func gradeColor(letter string, p palette) string {
 	case "A+", "A":
 		return p.green
 	case "B":
-		return p.cyan
+		return p.accent
 	case "C":
 		return p.yellow
 	default:
