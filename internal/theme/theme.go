@@ -29,8 +29,6 @@ const (
 	Dot     = "·"
 	Down    = "↓"
 	Up      = "↑"
-	WarnI   = "⚠"
-	Bolt    = "⚡"
 )
 
 // Style codes.

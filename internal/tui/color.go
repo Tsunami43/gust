@@ -11,7 +11,5 @@ const (
 	showCursor = "\033[?25h"
 )
 
-func bold(s string) string   { return theme.Bold + s + theme.Reset }
-func dim(s string) string    { return theme.Dim + s + theme.Reset }
-func accent(s string) string { return theme.FG(theme.Accent) + s + theme.Reset }
-func alt(s string) string    { return theme.FG(theme.Alt) + s + theme.Reset }
+func dim(s string) string { return theme.Dim + s + theme.Reset }
+func alt(s string) string { return theme.FG(theme.Alt) + s + theme.Reset }
