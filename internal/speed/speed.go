@@ -5,18 +5,27 @@ package speed
 
 import "time"
 
-// endpoint is the base URL of the Cloudflare speed test service.
-const endpoint = "https://speed.cloudflare.com"
+// endpoint is the base URL of the Cloudflare speed test service. It is a
+// variable rather than a constant so tests can redirect it at a local server.
+var endpoint = "https://speed.cloudflare.com"
 
-// Result describes the outcome of a single throughput measurement.
+// Result describes the outcome of a single throughput measurement. Bytes and
+// Elapsed cover the whole transfer; rate, when set, is the steady-state
+// throughput measured after the TCP slow-start ramp has been discarded.
 type Result struct {
 	Bytes   int64         // number of bytes transferred
 	Elapsed time.Duration // wall-clock time spent transferring them
+	rate    float64       // steady-state bits/sec, or 0 when unmeasured
 }
 
-// BitsPerSecond returns the measured throughput in bits per second.
-// It returns 0 when no time has elapsed, avoiding a division by zero.
+// BitsPerSecond returns the measured throughput in bits per second. It prefers
+// the steady-state rate (which excludes slow-start) and otherwise falls back
+// to the whole-transfer average. It returns 0 when no time has elapsed,
+// avoiding a division by zero.
 func (r Result) BitsPerSecond() float64 {
+	if r.rate > 0 {
+		return r.rate
+	}
 	if r.Elapsed <= 0 {
 		return 0
 	}

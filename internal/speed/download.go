@@ -23,23 +23,25 @@ func Download(ctx context.Context, client *http.Client, totalBytes int64, stream
 	if progress == nil {
 		progress = new(int64)
 	}
-	perStream := totalBytes / int64(streams)
-	if perStream <= 0 {
-		// Not enough data to split; fall back to a single stream.
-		perStream = totalBytes
-		streams = 1
-	}
+	sizes := splitSizes(totalBytes, streams)
 
 	var wg sync.WaitGroup
-	errs := make(chan error, streams)
+	errs := make(chan error, len(sizes))
+	launched := 0
 
 	start := time.Now()
-	for i := 0; i < streams; i++ {
+	trimmer := newSlowStartTrimmer(progress, totalBytes/10, start)
+
+	for _, sz := range sizes {
+		if sz <= 0 {
+			continue
+		}
+		launched++
 		wg.Add(1)
-		go func() {
+		go func(sz int64) {
 			defer wg.Done()
 
-			url := fmt.Sprintf("%s/__down?bytes=%d", endpoint, perStream)
+			url := fmt.Sprintf("%s/__down?bytes=%d", endpoint, sz)
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {
 				errs <- err
@@ -56,16 +58,16 @@ func Download(ctx context.Context, client *http.Client, totalBytes int64, stream
 			if _, err := io.Copy(&countingWriter{counter: progress}, resp.Body); err != nil {
 				errs <- err
 			}
-		}()
+		}(sz)
 	}
 	wg.Wait()
-	elapsed := time.Since(start)
+	res := trimmer.result(atomic.LoadInt64(progress), time.Now())
 
 	close(errs)
-	if err := <-errs; err != nil {
+	if err := transferError(ctx, errs, launched); err != nil {
 		return Result{}, fmt.Errorf("download: %w", err)
 	}
-	return Result{Bytes: atomic.LoadInt64(progress), Elapsed: elapsed}, nil
+	return res, nil
 }
 
 // countingWriter discards everything written to it while atomically counting
