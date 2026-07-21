@@ -1,11 +1,6 @@
-```
- ██████╗ ██╗   ██╗███████╗████████╗
-██╔════╝ ██║   ██║██╔════╝╚══██╔══╝
-██║  ███╗██║   ██║███████╗   ██║
-██║   ██║██║   ██║╚════██║   ██║
-╚██████╔╝╚██████╔╝███████║   ██║
- ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝
-```
+<img src="docs/demo.gif" alt="gust — a full test running in the interactive menu" width="800">
+
+<h1 align="center">GUST</h1>
 
 **Fast, dependency-free internet speed test & public-IP checker for your terminal.**
 
@@ -59,7 +54,7 @@ gust
   ██║   ██║██║   ██║╚════██║   ██║
   ╚██████╔╝╚██████╔╝███████║   ██║
    ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝
-  internet speed test · v1.3.0
+  internet speed test · vX.X.X
 
   main menu
   ❯ Full test       latency + download + upload
