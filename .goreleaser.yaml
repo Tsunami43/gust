@@ -1,0 +1,92 @@
+version: 2
+
+project_name: gust
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: gust
+    main: ./cmd/gust
+    binary: gust
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: gust
+    ids:
+      - gust
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - CHANGELOG.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+# Commits the Homebrew cask into Casks/ in this very repository, which then
+# doubles as the tap: `brew tap Tsunami43/gust https://github.com/Tsunami43/gust`.
+# Writing to our own repository needs no extra secret — the built-in
+# GITHUB_TOKEN of the release workflow is enough.
+homebrew_casks:
+  - name: gust
+    homepage: https://github.com/Tsunami43/gust
+    description: Fast, dependency-free internet speed test and public-IP checker for your terminal
+    license: MIT
+    directory: Casks
+    repository:
+      owner: Tsunami43
+      name: gust
+      branch: master
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    commit_author:
+      name: Tsunami43
+      email: vvibestroy@gmail.com
+    commit_msg_template: "gust {{ .Tag }}"
+    # The binaries are not notarised, so drop the quarantine flag on install —
+    # otherwise Gatekeeper refuses to run them.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/gust"]
+          end
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```sh
+    brew tap Tsunami43/gust https://github.com/Tsunami43/gust
+    brew install gust
+    ```

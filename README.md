@@ -25,7 +25,14 @@ Written in pure Go: **no third-party dependencies**, just the standard library.
 
 ## Install
 
-Requires **Go 1.22+**.
+Homebrew (macOS):
+
+```sh
+brew tap Tsunami43/gust https://github.com/Tsunami43/gust
+brew install gust
+```
+
+With Go (1.22+), on any platform:
 
 ```sh
 go install github.com/Tsunami43/gust/cmd/gust@latest
