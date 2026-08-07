@@ -29,7 +29,9 @@ Homebrew (macOS):
 
 ```sh
 brew tap Tsunami43/gust https://github.com/Tsunami43/gust
-brew install gust
+brew trust --cask Tsunami43/gust/gust   # Homebrew 6+ requires trusting third-party taps
+brew install --cask Tsunami43/gust/gust
+gust -version
 ```
 
 With Go (1.22+), on any platform:

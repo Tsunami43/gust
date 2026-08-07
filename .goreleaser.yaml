@@ -88,5 +88,6 @@ release:
 
     ```sh
     brew tap Tsunami43/gust https://github.com/Tsunami43/gust
-    brew install gust
+    brew trust --cask Tsunami43/gust/gust
+    brew install --cask Tsunami43/gust/gust
     ```
